@@ -19,8 +19,6 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -88,7 +86,7 @@ public class Main {
                 }
                 else
                 {
-                    JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make shure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
+                    JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make sure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
                 }
             }
             else
@@ -99,7 +97,18 @@ public class Main {
                     {
                         //launcher.setStatus(getLocalMD5()+" - "+getRemoteMD5());
                         launcher.setStatus("Downloading ... ");
-                        download();
+                        try {
+                            download();
+                        }
+                        catch (Exception ex) {
+                            if (JOptionPane.showConfirmDialog(null, 
+                                    "The download of the new version of " + program + " failed:\n" + ex
+                                    + "\n\nDo you want to start the recent version instead?", "Error",
+                                    JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE) != JOptionPane.YES_OPTION) {
+                                JOptionPane.showMessageDialog(null, "Launching " + name + " aborted.", "Error #download", JOptionPane.ERROR_MESSAGE);
+                                System.exit(1);
+                            };
+                        }
                     }
                 }
                 launcher.setStatus("Starting application ...");
