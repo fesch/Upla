@@ -87,6 +87,7 @@ public class Main {
                 else
                 {
                     JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make sure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
+                    System.exit(1);
                 }
             }
             else
