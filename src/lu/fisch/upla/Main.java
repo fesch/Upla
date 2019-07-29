@@ -11,6 +11,8 @@ import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.URLConnection;
+import java.net.URLDecoder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.DigestInputStream;
@@ -46,6 +48,14 @@ public class Main {
         }
         
         if(path.startsWith("/"))
+        {
+            path = "/"+path;
+        }
+        
+        if((System.getProperty("os.name").toLowerCase().startsWith("mac os x") ||
+            System.getProperty("os.name").toLowerCase().startsWith("nix") ||
+            System.getProperty("os.name").toLowerCase().startsWith("nux")) &&
+            !path.startsWith("/"))
         {
             path = "/"+path;
         }
@@ -87,6 +97,7 @@ public class Main {
                 else
                 {
                     JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make sure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
+                    System.exit(1);
                 }
             }
             else
@@ -118,6 +129,7 @@ public class Main {
         catch(Exception e)
         {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Error #main 2", JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
         }
     }
     
@@ -237,7 +249,7 @@ public class Main {
         try (InputStream in = connection.getInputStream()) {
             //System.out.println(program);
             //JOptionPane.showMessageDialog(null, program, "program", JOptionPane.ERROR_MESSAGE);
-            out = new FileOutputStream(new File(program));
+            out = new FileOutputStream(new File(URLDecoder.decode(program,StandardCharsets.UTF_8.name())));
             byte[] buffer = new byte[2048];
             int length;
             int downloaded = 0;
@@ -300,12 +312,12 @@ public class Main {
                        "-Dcom.apple.mrj.application.apple.menu.about.name="+name+"",
                        "-Dapple.awt.application.name="+name+"",
                        "-Xdock:name="+name,
-                       program).start();
+                       URLDecoder.decode(program,StandardCharsets.UTF_8.name())).start();
                //Process process = new ProcessBuilder(javaw.getAbsolutePath(),"-jar","-Dapple.laf.useScreenMenuBar=true",program).start();
             }
             else
             {
-                Process process = new ProcessBuilder(javaw.getAbsolutePath(),"-jar",program).start();
+                Process process = new ProcessBuilder(javaw.getAbsolutePath(),"-jar",URLDecoder.decode(program,StandardCharsets.UTF_8.name())).start();
             }
             try {
                 // terminated this process
