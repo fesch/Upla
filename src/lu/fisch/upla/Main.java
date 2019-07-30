@@ -117,7 +117,7 @@ public class Main {
                 {
                     JOptionPane.showMessageDialog(null, "The file <"+programJAR+"> can't be found!"
                         + "\n\n"
-                        + "You chose to never look for updates online so "+name+" won't be albe to start right now."
+                        + "You chose never to look for updates online so "+name+" won't be able to start right now."
                         + "\n\n"
                         + "You may want to modify your installation and switch to another update mode ...", "Error", JOptionPane.ERROR_MESSAGE);
                     System.exit(1);
