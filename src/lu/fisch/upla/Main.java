@@ -19,6 +19,7 @@ import java.security.DigestInputStream;
 import java.security.KeyManagementException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
 import java.util.TreeSet;
 import java.util.concurrent.TimeUnit;
 import javax.net.ssl.HttpsURLConnection;
@@ -31,12 +32,19 @@ public class Main {
 
     private static String name = "Unimozer";
     private static String program = "Unimozer.jar";
+    private static String programJAR = "Unimozer.jar";
     private static String programUri = "https://unimozer.fisch.lu/webstart/"+program;
     private static String md5Uri = "https://unimozer.fisch.lu/webstart/md5.php";
     private static String iconName = "unimozer.png";
+    private static int updateMode = 0;
+    private static String[] args;
     
     public static void main(String[] args) throws IOException
     {
+        // save args to class variable
+        Main.args=args;
+        
+        //JOptionPane.showMessageDialog(null, buffer, "BUFFER", JOptionPane.ERROR_MESSAGE);
         //JOptionPane.showMessageDialog(null, "Starting ...", "Error", JOptionPane.ERROR_MESSAGE);
 
         String path = "";
@@ -66,11 +74,31 @@ public class Main {
         Ini.getInstance().load();
         name = Ini.getInstance().getProperty("name", "Unimozer");
         program = Ini.getInstance().getProperty("program", "Unimozer.jar");
+        programJAR = program;
         programUri = Ini.getInstance().getProperty("programUri", "https://unimozer.fisch.lu/webstart/"+program);
         program = path+program;
         md5Uri = Ini.getInstance().getProperty("md5Uri", "https://unimozer.fisch.lu/webstart/md5.php");
         iconName = Ini.getInstance().getProperty("iconName", "unimozer.png");
+        updateMode = Integer.valueOf(Ini.getInstance().getProperty("updateMode", "0"));
         //Ini.getInstance().save();
+        
+        String buffer = "";
+        for (int i = 0; i < args.length; i++) {
+            String arg = args[i];
+            buffer+=arg+" ";
+        }
+        if(buffer.trim().equals("/modify=1"))
+        //if(true)
+        {
+            //JOptionPane.showMessageDialog(null, "You are now in modification mode ...", "Modification mode", JOptionPane.ERROR_MESSAGE);
+            MainFrame mainFrame = new MainFrame();
+            mainFrame.setMode(updateMode);
+            mainFrame.setVisible(true);
+            Ini.getInstance().setProperty("updateMode",String.valueOf(mainFrame.getMode()));
+            Ini.getInstance().save();
+            System.exit(0);
+        }
+        
 
         Launcher launcher = new Launcher();
         launcher.setIcon(new javax.swing.ImageIcon(launcher.getClass().getResource("/lu/fisch/upla/icons/"+iconName)));
@@ -85,40 +113,76 @@ public class Main {
             launcher.setStatus("Testing local cache ...");
             if(!jar.exists())
             {
-                launcher.setStatus("Testing network ...");
-                if(isOnline())
+                if(updateMode==2)
                 {
-                    launcher.setStatus("Downloading ...");
-                    //launcher.setStatus(program);
-                    download();
-                    launcher.setStatus("Starting application ...");
-                    start();
+                    JOptionPane.showMessageDialog(null, "The file <"+programJAR+"> can't be found!"
+                        + "\n\n"
+                        + "You chose to never look for updates online so "+name+" won't be albe to start right now."
+                        + "\n\n"
+                        + "You may want to modify your installation and switch to another update mode ...", "Error", JOptionPane.ERROR_MESSAGE);
+                    System.exit(1);
                 }
                 else
                 {
-                    JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make sure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
-                    System.exit(1);
+                    launcher.setStatus("Testing network ...");
+                    if(isOnline())
+                    {
+                        if(updateMode==1)
+                        {
+                            int res = JOptionPane.showConfirmDialog(null, "The file <"+programJAR+"> can't be found!"
+                                + "\n\n"
+                                + "Do you want to download it now? ("+name+" will quit otherwise ...)", "Error", JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE);
+                            if(res==JOptionPane.NO_OPTION)
+                                System.exit(1);
+                        }
+                        
+                        launcher.setStatus("Downloading ...");
+                        //launcher.setStatus(program);
+                        download();
+                        launcher.setStatus("Starting application ...");
+                        start();
+                    }
+                    else
+                    {
+                        JOptionPane.showMessageDialog(null, "The server can't be reached.\nPlease make sure you have an active internet connection ...", "Error", JOptionPane.ERROR_MESSAGE);
+                        System.exit(1);
+                    }
                 }
             }
             else
             {
-                if(isOnline())
+                if(updateMode!=2)
                 {
-                    if(!getLocalMD5().equals(getRemoteMD5()))
+                    if(isOnline())
                     {
-                        //launcher.setStatus(getLocalMD5()+" - "+getRemoteMD5());
-                        launcher.setStatus("Downloading ... ");
-                        try {
-                            download();
-                        }
-                        catch (Exception ex) {
-                            if (JOptionPane.showConfirmDialog(null, 
-                                    "The download of the new version of " + program + " failed:\n" + ex
-                                    + "\n\nDo you want to start the recent version instead?", "Error",
-                                    JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE) != JOptionPane.YES_OPTION) {
-                                JOptionPane.showMessageDialog(null, "Launching " + name + " aborted.", "Error #download", JOptionPane.ERROR_MESSAGE);
-                                System.exit(1);
-                            };
+                        if(!getLocalMD5().equals(getRemoteMD5()))
+                        {
+                            boolean download = true;
+                            if(updateMode==1)
+                            {
+                                int res = JOptionPane.showConfirmDialog(null, "An update is available!"
+                                    + "\n\n"
+                                    + "Do you want to download it now?", "Error", JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE);
+                                if(res==JOptionPane.NO_OPTION)
+                                    download=false;
+                            }
+                            if(download)
+                            {
+                                //launcher.setStatus(getLocalMD5()+" - "+getRemoteMD5());
+                                launcher.setStatus("Downloading ... ");
+                                try {
+                                    download();
+                                }
+                                catch (Exception ex) {
+                                    if (JOptionPane.showConfirmDialog(null, 
+                                            "The download of the new version of " + program + " failed:\n" + ex
+                                            + "\n\nDo you want to start the recent version instead?", "Error",
+                                            JOptionPane.YES_NO_OPTION, JOptionPane.ERROR_MESSAGE) != JOptionPane.YES_OPTION) {
+                                        JOptionPane.showMessageDialog(null, "Launching " + name + " aborted.", "Error #download", JOptionPane.ERROR_MESSAGE);
+                                        System.exit(1);
+                                    };
+                                }
+                            }
                         }
                     }
                 }
@@ -303,21 +367,37 @@ public class Main {
             //System.out.println("Starting: "+javaw.getAbsolutePath()+" -jar "+program);
             if(System.getProperty("os.name").toLowerCase().startsWith("mac os x"))
             {
-               Process process = new ProcessBuilder(javaw.getAbsolutePath(),
-                       "-jar",
-                       "-Dapple.laf.useScreenMenuBar=true",
-                       "-Dcom.apple.macos.use-file-dialog-packages=true",
-                       "-Dcom.apple.macos.useScreenMenuBar=true",
-                       "-Dcom.apple.smallTabs=true-Xmx1024M",
-                       "-Dcom.apple.mrj.application.apple.menu.about.name="+name+"",
-                       "-Dapple.awt.application.name="+name+"",
-                       "-Xdock:name="+name,
-                       URLDecoder.decode(program,StandardCharsets.UTF_8.name())).start();
+                ArrayList<String> list = new ArrayList<>();
+                list.add(javaw.getAbsolutePath());
+                list.add("-jar");
+                list.add("-Dapple.laf.useScreenMenuBar=true");
+                list.add("-Dcom.apple.macos.use-file-dialog-packages=true");
+                list.add("-Dcom.apple.macos.useScreenMenuBar=true");
+                list.add("-Dcom.apple.smallTabs=true-Xmx1024M");
+                list.add("-Dcom.apple.mrj.application.apple.menu.about.name="+name+"");
+                list.add("-Dapple.awt.application.name="+name+"");
+                list.add("-Xdock:name="+name);
+                list.add(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
+                for (int i = 0; i < args.length; i++) {
+                   String arg = args[i];
+                    list.add(arg);
+                }
+                ProcessBuilder processBuilder = new ProcessBuilder(list);
+                Process process = processBuilder.start();
                //Process process = new ProcessBuilder(javaw.getAbsolutePath(),"-jar","-Dapple.laf.useScreenMenuBar=true",program).start();
             }
             else
             {
-                Process process = new ProcessBuilder(javaw.getAbsolutePath(),"-jar",URLDecoder.decode(program,StandardCharsets.UTF_8.name())).start();
+                ArrayList<String> list = new ArrayList<>();
+                list.add(javaw.getAbsolutePath());
+                list.add("-jar");
+                list.add(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
+                for (int i = 0; i < args.length; i++) {
+                   String arg = args[i];
+                    list.add(arg);
+                }
+                ProcessBuilder processBuilder = new ProcessBuilder(list);
+                Process process = processBuilder.start();
             }
             try {
                 // terminated this process
