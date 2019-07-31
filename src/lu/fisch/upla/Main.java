@@ -90,13 +90,19 @@ public class Main {
         if(buffer.trim().equals("/modify=1"))
         //if(true)
         {
-            //JOptionPane.showMessageDialog(null, "You are now in modification mode ...", "Modification mode", JOptionPane.ERROR_MESSAGE);
-            MainFrame mainFrame = new MainFrame();
-            mainFrame.setMode(updateMode);
-            mainFrame.setVisible(true);
-            Ini.getInstance().setProperty("updateMode",String.valueOf(mainFrame.getMode()));
-            Ini.getInstance().save();
-            System.exit(0);
+            try {
+                //JOptionPane.showMessageDialog(null, "You are now in modification mode ...", "Modification mode", JOptionPane.ERROR_MESSAGE);
+                MainFrame mainFrame = new MainFrame();
+                mainFrame.setMode(updateMode);
+                mainFrame.setVisible(true);
+                Ini.getInstance().setProperty("updateMode",String.valueOf(mainFrame.getMode()));
+                Ini.getInstance().save();
+                System.exit(0);
+            }
+            catch (Exception ex) {
+                JOptionPane.showMessageDialog(null, ex.getMessage(), "Error #main 3", JOptionPane.ERROR_MESSAGE);
+                System.exit(1);
+            }
         }
         
 
@@ -109,7 +115,7 @@ public class Main {
 
         try 
         {
-            File jar = new File(program);
+            File jar = new File(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
             launcher.setStatus("Testing local cache ...");
             if(!jar.exists())
             {
@@ -260,7 +266,7 @@ public class Main {
     {
         // get md5 hash of local file
         MessageDigest md = MessageDigest.getInstance("MD5");
-        try (InputStream is = Files.newInputStream(Paths.get(program))) {
+        try (InputStream is = Files.newInputStream(Paths.get(URLDecoder.decode(program,StandardCharsets.UTF_8.name())))) {
             DigestInputStream dis = new DigestInputStream(is, md);
             byte[] buffer = new byte[4 * 1024];
             int read;
@@ -322,8 +328,8 @@ public class Main {
                 out.write(buffer, 0, length);
                 downloaded+=length;
             }
+            out.close();
         }
-        out.close();
     }
     
     private static void start() throws IOException, InterruptedException
