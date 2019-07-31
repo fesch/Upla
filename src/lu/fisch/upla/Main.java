@@ -109,7 +109,8 @@ public class Main {
 
         try 
         {
-            File jar = new File(program);
+            File jar = new File(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
+            //JOptionPane.showMessageDialog(null, jar, "jar", JOptionPane.ERROR_MESSAGE);
             launcher.setStatus("Testing local cache ...");
             if(!jar.exists())
             {
