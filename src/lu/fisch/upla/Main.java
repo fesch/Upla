@@ -169,7 +169,7 @@ public class Main {
                             {
                                 int res = JOptionPane.showConfirmDialog(null, "An update is available!"
                                     + "\n\n"
-                                    + "Do you want to download it now?", "Error", JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE);
+                                    + "Do you want to download it now?", "Information", JOptionPane.YES_NO_OPTION,JOptionPane.QUESTION_MESSAGE);
                                 if(res==JOptionPane.NO_OPTION)
                                     download=false;
                             }
