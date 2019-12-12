@@ -340,22 +340,28 @@ public class Main {
         boolean found=false;
 
         // get boot folder
-        String bootFolder = System.getProperty("sun.boot.library.path");
-        // go back two directories
-        bootFolder=bootFolder.substring(0,bootFolder.lastIndexOf(System.getProperty("file.separator")));
-        bootFolder=bootFolder.substring(0,bootFolder.lastIndexOf(System.getProperty("file.separator")));
-
-        // get all files from the boot folder
-        File bootFolderfile = new File(bootFolder);
-        File[] files = bootFolderfile.listFiles();
+        String bootFolderList = System.getProperty("sun.boot.library.path");
+        String[] bootFolders = bootFolderList.split(File.pathSeparator);
         TreeSet<String> directories = new TreeSet<String>();
-        for(int i=0;i<files.length;i++)
-        {
-            if(files[i].isDirectory()) directories.add(files[i].getAbsolutePath());
+        for (String bootFolder: bootFolders) {
+            if (bootFolder.endsWith("bin")) {
+                // go back two directories
+                bootFolder=bootFolder.substring(0,bootFolder.lastIndexOf(System.getProperty("file.separator")));
+                bootFolder=bootFolder.substring(0,bootFolder.lastIndexOf(System.getProperty("file.separator")));
+
+                // get all files from the boot folder
+                File bootFolderfile = new File(bootFolder);
+                File[] files = bootFolderfile.listFiles();
+                for (int i=0; i<files.length; i++)
+                {
+                    if (files[i].isDirectory())
+                        directories.add(files[i].getAbsolutePath());
+                }
+            }
         }
 
         File javaw = null;
-        while(directories.size()>0 && found==false)
+        while (directories.size()>0 && !found)
         {
             String JDK_directory = directories.last();
             directories.remove(JDK_directory);   
@@ -368,7 +374,7 @@ public class Main {
             if(javaw.exists()) break;
         }
 
-        if(javaw!=null)
+        if (javaw != null)
         {
             // start it
             //System.out.println("Starting: "+javaw.getAbsolutePath()+" -jar "+program);
