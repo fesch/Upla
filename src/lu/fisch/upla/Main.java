@@ -202,6 +202,8 @@ public class Main {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Error #main 2", JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
+        // make sure we terminate the process
+        System.exit(0);
     }
     
     private static boolean isOnline()
