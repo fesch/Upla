@@ -20,8 +20,12 @@ import java.security.KeyManagementException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.TreeSet;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -42,6 +46,8 @@ public class Main {
     // END KGU#1095 2023-10-30
     private static String[] args;
     
+    private static Matcher VER_MATCHER = Pattern.compile("(.*?)([0-9]+\\.[0-9]+([._][0-9]+)*)(.*?)").matcher("");
+    
     public static void main(String[] args) throws IOException
     {
         // save args to class variable
@@ -58,9 +64,9 @@ public class Main {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Error #main 1", JOptionPane.ERROR_MESSAGE);
         }
         
-        if(path.startsWith("/"))
+        if (path.startsWith("/"))
         {
-            path = "/"+path;
+            path = "/" + path;
         }
         
         if((System.getProperty("os.name").toLowerCase().startsWith("mac os x") ||
@@ -93,7 +99,7 @@ public class Main {
             String arg = args[i];
             buffer+=arg+" ";
         }
-        if (buffer.trim().equals("/modify=1"))
+        if(buffer.trim().equals("/modify=1"))
         //if(true)
         {
             try {
@@ -101,19 +107,12 @@ public class Main {
                 MainFrame mainFrame = new MainFrame();
                 mainFrame.setMode(updateMode);
                 mainFrame.setVisible(true);
-                Ini.getInstance().setProperty("updateMode", String.valueOf(mainFrame.getMode()));
+                Ini.getInstance().setProperty("updateMode",String.valueOf(mainFrame.getMode()));
                 Ini.getInstance().save();
                 System.exit(0);
             }
             catch (Exception ex) {
-                // START KGU 2023-10-30: Better be cautious, the exception message might be empty
-                //JOptionPane.showMessageDialog(null, ex.getMessage(), "Error #main 3", JOptionPane.ERROR_MESSAGE);
-                String errorMsg = ex.getMessage();
-                if (errorMsg == null || errorMsg.isEmpty()) {
-                    errorMsg = "Could not alter the update mode: " + ex.toString();
-                }
-                JOptionPane.showMessageDialog(null, errorMsg, "Error #main 3", JOptionPane.ERROR_MESSAGE);
-                // END KGU 2023-10-30
+                JOptionPane.showMessageDialog(null, ex.getMessage(), "Error #main 3", JOptionPane.ERROR_MESSAGE);
                 System.exit(1);
             }
         }
@@ -126,6 +125,7 @@ public class Main {
         launcher.setLocationRelativeTo(null);
 
         // START KGU#1095 2023-10-30: Issue #10
+        // FIXME do this after the directory selection if we don't find a suited one...
         if (!minJavaVersion.isEmpty()) {
             launcher.setStatus("Checking Java version ...");
             checkJavaVersion();
@@ -139,9 +139,9 @@ public class Main {
             File jar = new File(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
             //JOptionPane.showMessageDialog(null, jar, "jar", JOptionPane.ERROR_MESSAGE);
             launcher.setStatus("Testing local cache ...");
-            if (!jar.exists())
+            if(!jar.exists())
             {
-                if (updateMode == 2)
+                if(updateMode==2)
                 {
                     JOptionPane.showMessageDialog(null, "The file <"+programJAR+"> can't be found!"
                         + "\n\n"
@@ -155,7 +155,7 @@ public class Main {
                     launcher.setStatus("Testing network ...");
                     if(isOnline())
                     {
-                        if (updateMode == 1)
+                        if(updateMode==1)
                         {
                             int res = JOptionPane.showConfirmDialog(null, "The file <"+programJAR+"> can't be found!"
                                 + "\n\n"
@@ -179,7 +179,7 @@ public class Main {
             }
             else
             {
-                if (updateMode != 2)
+                if(updateMode!=2)
                 {
                     if(isOnline())
                     {
@@ -363,7 +363,10 @@ public class Main {
         // get boot folder
         String bootFolderList = System.getProperty("sun.boot.library.path");
         String[] bootFolders = bootFolderList.split(File.pathSeparator);
-        TreeSet<String> directories = new TreeSet<String>();
+        // START KGU#1095 2023-10-30: Issue #10 We sort by formatted version strings
+        //TreeSet<String> directories = new TreeSet<String>();
+        TreeMap<String, String> directories = new TreeMap<String, String>();
+        // END KGU#1095 2023-10-30
         for (String bootFolder: bootFolders) {
             if (bootFolder.endsWith("bin")) {
                 // go back two directories
@@ -375,8 +378,17 @@ public class Main {
                 File[] files = bootFolderfile.listFiles();
                 for (int i=0; i<files.length; i++)
                 {
-                    if (files[i].isDirectory())
-                        directories.add(files[i].getAbsolutePath());
+                    if (files[i].isDirectory()) {
+                        // START KGU#1095 2023-10-30: Issue #10
+                        //directories.add(files[i].getAbsolutePath());
+                        String key = deriveFormattedVersionString(files[i].getName());
+                        if (key.isEmpty()) {
+                            // Last to be used, as potential fallback
+                            key = "000." + files[i].getName();
+                        }
+                        directories.put(key, files[i].getAbsolutePath());
+                        // END KGU#1095 2023-10-30
+                    }
                 }
             }
         }
@@ -384,14 +396,20 @@ public class Main {
         File javaw = null;
         while (directories.size()>0 && !found)
         {
-            String JDK_directory = directories.last();
-            directories.remove(JDK_directory);   
-
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"java");
+            // START KGU#1095 2023-10-30: Issue #10
+            //String JDK_directory = directories.last();
+            //directories.remove(JDK_directory);
+            Entry<String, String> entry = directories.lastEntry();
+            String JDK_directory = entry.getValue();
+            directories.remove(entry.getKey());
+            // END KGU#1095 2023-10-30
+            
+            JDK_directory += bin + System.getProperty("file.separator");
+            javaw = new File(JDK_directory + "java");
             if(javaw.exists()) break;
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"javaw");
+            javaw = new File(JDK_directory + "javaw");
             if(javaw.exists()) break;
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"javaw.exe");
+            javaw = new File(JDK_directory + "javaw.exe");
             if(javaw.exists()) break;
         }
 
@@ -451,38 +469,9 @@ public class Main {
      */
     private static void checkJavaVersion() {
         String javaVersion = System.getProperty("java.version");
-        String[] parts0 = minJavaVersion.split("\\.");
-        String[] parts1 = javaVersion.split("\\.");
-        int i0 = 0, i1 = 0;
-        if (parts0.length > 1 && parts0[0].equals("1")) {
-            i0++;
-        }
-        if (parts1.length > 1 && parts1[0].equals("1")) {
-            i1++;
-        }
-        for (; i0 < parts0.length; i0++, i1++) {
-            try {
-                int ver0 = Integer.parseInt(parts0[i0]);
-                int ver1 = 0;
-                if (i1 < parts1.length) {
-                    ver1 = Integer.parseInt(parts1[i1]);
-                }
-                if (ver0 > ver1) {
-                    JOptionPane.showMessageDialog(null,
-                        name + " requires at least Java version " + minJavaVersion + ","
-                        + "\n"
-                        + "but is attempted to be run with Java " + javaVersion + "only!" 
-                        + "\n\n"
-                        + name + " cannot be started."
-                        + "\n\n"
-                        + "Ensure at least Java " + minJavaVersion + " is installed or disable Java " + javaVersion + "!",
-                        "Java Version Error",
-                        JOptionPane.ERROR_MESSAGE);
-                    System.exit(1);
-                }
-            }
-            catch (NumberFormatException ex) {
-                int answer = JOptionPane.showConfirmDialog(null,
+        int cmp = compareVersionStrings(javaVersion, minJavaVersion);
+        if (cmp == -2) {
+            int answer = JOptionPane.showConfirmDialog(null,
                     "Having trouble to compare required Java version " + minJavaVersion
                     + " with current Java version " + javaVersion + "."
                     + "\n\n"
@@ -490,10 +479,22 @@ public class Main {
                     "Java Version Trouble",
                     JOptionPane.OK_CANCEL_OPTION,
                     JOptionPane.WARNING_MESSAGE);
-                if (answer == JOptionPane.CANCEL_OPTION) {
-                    System.exit(1);
-                }
+            if (answer == JOptionPane.CANCEL_OPTION) {
+                System.exit(1);
             }
+        }
+        else if (cmp < 0) {
+            JOptionPane.showMessageDialog(null,
+                        name + " requires at least Java version " + minJavaVersion + ","
+                        + "\n"
+                        + "but is attempted to be run with Java " + javaVersion + " only!" 
+                        + "\n\n"
+                        + name + " cannot be started."
+                        + "\n\n"
+                        + "Ensure at least Java " + minJavaVersion + " is installed or disable Java " + javaVersion + "!",
+                        "Java Version Error",
+                        JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
         }
     }
 
@@ -509,81 +510,60 @@ public class Main {
      * @param required - a string assumed to specify a required Java version, e.g.
      *     "11" or "17.2.1" or "jre1.8.2".
      * @return -1, 0, or 1 if the contained dot-separated number sequences could be
-     *     compared, -2 or 2 otherwise.
+     *     compared, -2 otherwise.
      */
     private static int compareVersionStrings(String avail, String required)
     {
-        String[] parts0 = required.split("\\.");
-        String[] parts1 = avail.split("\\.");
-        if (parts0.length > 1) {
-            parts0[0] = cutOffNonDigits(parts0[0], true);
-            parts0[parts0.length-1] = cutOffNonDigits(parts0[parts0.length-1], false);
+        avail = deriveFormattedVersionString(avail);
+        required = deriveFormattedVersionString(required);
+        if (avail.isEmpty() || required.isEmpty()) {
+            return -2;
         }
-        if (parts1.length > 1) {
-            parts1[0] = cutOffNonDigits(parts1[0], true);
-            parts1[parts1.length-1] = cutOffNonDigits(parts1[parts1.length-1], false);
+        int cmp = avail.compareTo(required);
+        if (cmp != 0) {
+            cmp /= Math.abs(cmp);
         }
-        int i0 = 0, i1 = 0;
-        if (parts0.length > 1 && parts0[0].equals("1")) {
-            i0++;
-        }
-        if (parts1.length > 1 && parts1[0].equals("1")) {
-            i1++;
-        }
-        for (; i0 < parts0.length; i0++, i1++) {
-            try {
-                int ver0 = Integer.parseInt(parts0[i0]);
-                int ver1 = 0;
-                if (i1 < parts1.length) {
-                    ver1 = Integer.parseInt(parts1[i1]);
-                }
-                if (ver0 > ver1) {
-                    return -1;
-                }
-                else if (ver0 < ver1) {
-                    return 1;
-                }
-            }
-            catch (NumberFormatException ex) {
-                return -2;
-            }
-        }
-        return 0;
+        return cmp;
     }
 
     /**
-     * Cuts off all characters before or after the longest contiguous
-     * sequence of digits from end (if {@code atStart} is {@code true})
-     * or from start (if {@code atStart} is {@code false})
+     * Extracts version information of the kind d.dd.ddd (with varying
+     * number of digits in every section) from the given {@code verString}
+     * and returns a formatted version with exactly 3 digits per section
+     * for a lexicographic comparison and ordering. A leading 1 (as in
+     * "1.8.0_261") will be dropped.
      * 
-     * @param mixedString - the possibly mixed string, e.g. "jdk17" or
-     *     "0_261-hotspot".
-     * @param atStart - whether to cleanup at start (otherwise at end).
-     * @return the "cleaned" string, e.g. "17" from "jdk17" with {@code
-     *     atStart = true} or "0" from "0_261-hotspot" with {@code
-     *     atStart = false}.
+     * @param verString - a string assumed to contain version information.
+     * @return the formatted string - might be empty if there is no version
+     *     info available - requires at least  single dot.
      */
-    private static String cutOffNonDigits(String mixedString, boolean atStart)
+    private static String deriveFormattedVersionString(String verString)
     {
-        if (atStart) {
-            int i = mixedString.length();
-            while (i > 0 && Character.isDigit(mixedString.charAt(i-1))) {
-                i--;
-            }
-            if (i > 0) {
-                mixedString = mixedString.substring(i);
-            }
-        }
-        else {
+        if (VER_MATCHER.reset(verString).matches()) {
+            verString = VER_MATCHER.group(2);
+            String[] parts = verString.split("[._]");
             int i = 0;
-            while (i < mixedString.length() && Character.isDigit(mixedString.charAt(i))) {
+            if (parts.length > 1 && parts[0].equals("1")) {
                 i++;
             }
-            if (i < mixedString.length()) {
-                mixedString = mixedString.substring(0, i);
+            StringBuilder sb = new StringBuilder();
+            for (; i < parts.length; i++) {
+                if (sb.length() > 0) {
+                    sb.append(".");
+                }
+                int nbr = 0;
+                try {
+                    nbr = Integer.parseInt(parts[i]);
+                }
+                catch (NumberFormatException ex) {}
+                sb.append(String.format("%03d", nbr));
             }
+            verString = sb.toString();
         }
-        return mixedString;
+        else {
+            verString = "";
+        }
+        return verString;
     }
     // END KGU#1095 2023-10-30
 
