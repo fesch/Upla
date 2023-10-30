@@ -14,6 +14,7 @@ import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.DigestInputStream;
 import java.security.KeyManagementException;
@@ -124,14 +125,6 @@ public class Main {
         launcher.setVisible(true);
         launcher.setLocationRelativeTo(null);
 
-        // START KGU#1095 2023-10-30: Issue #10
-        // FIXME do this after the directory selection if we don't find a suited one...
-        if (!minJavaVersion.isEmpty()) {
-            launcher.setStatus("Checking Java version ...");
-            checkJavaVersion();
-        }
-        // END KGU#1095 2023-10-30
-        
         launcher.setStatus("Loading ...");
 
         try 
@@ -358,7 +351,7 @@ public class Main {
     {
         // find javaw
         String bin = System.getProperty("file.separator")+"bin";
-        boolean found=false;
+        //boolean found=false;
 
         // get boot folder
         String bootFolderList = System.getProperty("sun.boot.library.path");
@@ -394,14 +387,15 @@ public class Main {
         }
 
         File javaw = null;
-        while (directories.size()>0 && !found)
+        String foundJavaVer = null;
+        while (!directories.isEmpty())
         {
             // START KGU#1095 2023-10-30: Issue #10
             //String JDK_directory = directories.last();
             //directories.remove(JDK_directory);
             Entry<String, String> entry = directories.lastEntry();
             String JDK_directory = entry.getValue();
-            directories.remove(entry.getKey());
+            directories.remove(foundJavaVer = entry.getKey());
             // END KGU#1095 2023-10-30
             
             JDK_directory += bin + System.getProperty("file.separator");
@@ -411,7 +405,15 @@ public class Main {
             if(javaw.exists()) break;
             javaw = new File(JDK_directory + "javaw.exe");
             if(javaw.exists()) break;
+            foundJavaVer = null;
         }
+
+        // START KGU#1095 2023-10-30: Issue #10
+        // FIXME do this after the directory selection if we don't find a suited one...
+        if (!minJavaVersion.isEmpty()) {
+            javaw = checkJavaVersion(foundJavaVer, javaw);
+        }
+        // END KGU#1095 2023-10-30
 
         if (javaw != null)
         {
@@ -445,32 +447,72 @@ public class Main {
                 list.add("-jar");
                 list.add(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
                 for (int i = 0; i < args.length; i++) {
-                   String arg = args[i];
+                    String arg = args[i];
                     list.add(arg);
                 }
                 ProcessBuilder processBuilder = new ProcessBuilder(list);
                 Process process = processBuilder.start();
             }
             try {
-                // terminated this process
+                // Wait a little before this process terminates
                 TimeUnit.SECONDS.sleep(1);
             } catch (InterruptedException ex) {
                 JOptionPane.showMessageDialog(null, ex.getMessage(), "Error #start", JOptionPane.ERROR_MESSAGE);
             }
-            // terminated this process but wait a bit
-            //Thread.sleep(1*1000);
+            // terminate this process
             System.exit(0);
         }
     }
 
     // START KGU#1095 2023-10-30: Issue #10 provide safer version selection
     /**
-     * Checks the current Java version in comparison to the required one
+     * Checks the current Java version in comparison to the required one, may
+     * abort this process. Otherwise returns a {@link File} object for the javaw
+     * executable, or {@code node}.<br/>
+     * <b>Note:<b/> Don't invoke this method {@link IFileLocationResolver}
+     * {@link #minJavaVersion} is not specified (i.e. empty).
+     * 
+     * @param foundVersion - a (formatted) version string derived from the
+     *    retrieved Java boot directory, or {@code null} (rather unlikely)
+     * @param javaw - either a {@link File} object representing the found
+     *    executable, or {@code null} if non was found (rather unlikely
+     *    since this process runs Java-based...)
+     * 
+     * @return a {@link File} object meant to specify executable for starting
+     *    the Java subprocess (may be given {@code javaw}).
      */
-    private static void checkJavaVersion() {
+    private static File checkJavaVersion(String foundVersion, File javaw) {
         String javaVersion = System.getProperty("java.version");
-        int cmp = compareVersionStrings(javaVersion, minJavaVersion);
-        if (cmp == -2) {
+        int cmp1 = compareVersionStrings(javaVersion, minJavaVersion);
+        int cmp2 = -2;
+        if (foundVersion != null) {
+            cmp2 =compareVersionStrings(foundVersion, minJavaVersion); 
+        }
+        // If the found version looks dubious or obsolete try the current version
+        if (cmp2 < 0 && cmp1 > 0) {
+            /* Rather desperate approach (java.home should have been among
+             * sun.boot.library.path)
+             */
+            File javawFile = null;
+            String JDK_directory = System.getProperty("java.home");
+            javawFile = Path.of(JDK_directory, "bin", "java").toFile();
+            if (!javawFile.exists()) {
+                javawFile = Path.of(JDK_directory, "bin", "javaw").toFile();
+            }
+            if (!javawFile.exists()) {
+                javawFile = Path.of(JDK_directory, "bin", "javaw.exe").toFile();
+            }
+            if (javawFile.exists()) {
+                foundVersion = javaVersion;
+                // Okay, indeed found something better suited
+                return javawFile;
+            }
+        }
+        if (javaw != null) {
+            javaVersion = javaw.getParentFile().getParentFile().getName();
+        }
+        if (cmp2 == -2) {
+            // Unclear version info - but should we actually pester the user?
             int answer = JOptionPane.showConfirmDialog(null,
                     "Having trouble to compare required Java version " + minJavaVersion
                     + " with current Java version " + javaVersion + "."
@@ -483,7 +525,8 @@ public class Main {
                 System.exit(1);
             }
         }
-        else if (cmp < 0) {
+        else if (cmp2 < 0) {
+            // The found version is obsolete and unsuited for the product start
             JOptionPane.showMessageDialog(null,
                         name + " requires at least Java version " + minJavaVersion + ","
                         + "\n"
@@ -496,6 +539,7 @@ public class Main {
                         JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
+        return javaw;
     }
 
     /**
