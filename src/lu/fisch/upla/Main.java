@@ -14,14 +14,19 @@ import java.net.URLConnection;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.DigestInputStream;
 import java.security.KeyManagementException;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
-import java.util.TreeSet;
+import java.util.Map.Entry;
+import java.util.TreeMap;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.TrustManager;
@@ -37,7 +42,12 @@ public class Main {
     private static String md5Uri = "https://unimozer.fisch.lu/webstart/md5.php";
     private static String iconName = "unimozer.png";
     private static int updateMode = 0;
+    // START KGU#1095 2023-10-30: Issue #10
+    private static String minJavaVersion = "";
+    // END KGU#1095 2023-10-30
     private static String[] args;
+    
+    private static Matcher VER_MATCHER = Pattern.compile("(.*?)([0-9]+\\.[0-9]+([._][0-9]+)*)(.*?)").matcher("");
     
     public static void main(String[] args) throws IOException
     {
@@ -55,9 +65,9 @@ public class Main {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Error #main 1", JOptionPane.ERROR_MESSAGE);
         }
         
-        if(path.startsWith("/"))
+        if (path.startsWith("/"))
         {
-            path = "/"+path;
+            path = "/" + path;
         }
         
         if((System.getProperty("os.name").toLowerCase().startsWith("mac os x") ||
@@ -80,6 +90,9 @@ public class Main {
         md5Uri = Ini.getInstance().getProperty("md5Uri", "https://unimozer.fisch.lu/webstart/md5.php");
         iconName = Ini.getInstance().getProperty("iconName", "unimozer.png");
         updateMode = Integer.valueOf(Ini.getInstance().getProperty("updateMode", "0"));
+        // START KGU#1095 2023-10-30: Issue #10
+        minJavaVersion = Ini.getInstance().getProperty("minJavaVersion", "");
+        // END KGU#1095 2023-10-30
         //Ini.getInstance().save();
         
         String buffer = "";
@@ -111,6 +124,7 @@ public class Main {
         launcher.setName(name);
         launcher.setVisible(true);
         launcher.setLocationRelativeTo(null);
+
         launcher.setStatus("Loading ...");
 
         try 
@@ -337,12 +351,15 @@ public class Main {
     {
         // find javaw
         String bin = System.getProperty("file.separator")+"bin";
-        boolean found=false;
+        //boolean found=false;
 
         // get boot folder
         String bootFolderList = System.getProperty("sun.boot.library.path");
         String[] bootFolders = bootFolderList.split(File.pathSeparator);
-        TreeSet<String> directories = new TreeSet<String>();
+        // START KGU#1095 2023-10-30: Issue #10 We sort by formatted version strings
+        //TreeSet<String> directories = new TreeSet<String>();
+        TreeMap<String, String> directories = new TreeMap<String, String>();
+        // END KGU#1095 2023-10-30
         for (String bootFolder: bootFolders) {
             if (bootFolder.endsWith("bin")) {
                 // go back two directories
@@ -354,25 +371,49 @@ public class Main {
                 File[] files = bootFolderfile.listFiles();
                 for (int i=0; i<files.length; i++)
                 {
-                    if (files[i].isDirectory())
-                        directories.add(files[i].getAbsolutePath());
+                    if (files[i].isDirectory()) {
+                        // START KGU#1095 2023-10-30: Issue #10
+                        //directories.add(files[i].getAbsolutePath());
+                        String key = deriveFormattedVersionString(files[i].getName());
+                        if (key.isEmpty()) {
+                            // Last to be used, as potential fallback
+                            key = "000." + files[i].getName();
+                        }
+                        directories.put(key, files[i].getAbsolutePath());
+                        // END KGU#1095 2023-10-30
+                    }
                 }
             }
         }
 
         File javaw = null;
-        while (directories.size()>0 && !found)
+        String foundJavaVer = null;
+        while (!directories.isEmpty())
         {
-            String JDK_directory = directories.last();
-            directories.remove(JDK_directory);   
-
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"java");
+            // START KGU#1095 2023-10-30: Issue #10
+            //String JDK_directory = directories.last();
+            //directories.remove(JDK_directory);
+            Entry<String, String> entry = directories.lastEntry();
+            String JDK_directory = entry.getValue();
+            directories.remove(foundJavaVer = entry.getKey());
+            // END KGU#1095 2023-10-30
+            
+            JDK_directory += bin + System.getProperty("file.separator");
+            javaw = new File(JDK_directory + "java");
             if(javaw.exists()) break;
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"javaw");
+            javaw = new File(JDK_directory + "javaw");
             if(javaw.exists()) break;
-            javaw = new File(JDK_directory+bin+System.getProperty("file.separator")+"javaw.exe");
+            javaw = new File(JDK_directory + "javaw.exe");
             if(javaw.exists()) break;
+            foundJavaVer = null;
         }
+
+        // START KGU#1095 2023-10-30: Issue #10
+        // FIXME do this after the directory selection if we don't find a suited one...
+        if (!minJavaVersion.isEmpty()) {
+            javaw = checkJavaVersion(foundJavaVer, javaw);
+        }
+        // END KGU#1095 2023-10-30
 
         if (javaw != null)
         {
@@ -406,21 +447,168 @@ public class Main {
                 list.add("-jar");
                 list.add(URLDecoder.decode(program,StandardCharsets.UTF_8.name()));
                 for (int i = 0; i < args.length; i++) {
-                   String arg = args[i];
+                    String arg = args[i];
                     list.add(arg);
                 }
                 ProcessBuilder processBuilder = new ProcessBuilder(list);
                 Process process = processBuilder.start();
             }
             try {
-                // terminated this process
+                // Wait a little before this process terminates
                 TimeUnit.SECONDS.sleep(1);
             } catch (InterruptedException ex) {
                 JOptionPane.showMessageDialog(null, ex.getMessage(), "Error #start", JOptionPane.ERROR_MESSAGE);
             }
-            // terminated this process but wait a bit
-            //Thread.sleep(1*1000);
+            // terminate this process
             System.exit(0);
         }
     }
+
+    // START KGU#1095 2023-10-30: Issue #10 provide safer version selection
+    /**
+     * Checks the current Java version in comparison to the required one, may
+     * abort this process. Otherwise returns a {@link File} object for the javaw
+     * executable, or {@code node}.<br/>
+     * <b>Note:<b/> Don't invoke this method {@link IFileLocationResolver}
+     * {@link #minJavaVersion} is not specified (i.e. empty).
+     * 
+     * @param foundVersion - a (formatted) version string derived from the
+     *    retrieved Java boot directory, or {@code null} (rather unlikely)
+     * @param javaw - either a {@link File} object representing the found
+     *    executable, or {@code null} if non was found (rather unlikely
+     *    since this process runs Java-based...)
+     * 
+     * @return a {@link File} object meant to specify executable for starting
+     *    the Java subprocess (may be given {@code javaw}).
+     */
+    private static File checkJavaVersion(String foundVersion, File javaw) {
+        String javaVersion = System.getProperty("java.version");
+        int cmp1 = compareVersionStrings(javaVersion, minJavaVersion);
+        int cmp2 = -2;
+        if (foundVersion != null) {
+            cmp2 =compareVersionStrings(foundVersion, minJavaVersion); 
+        }
+        // If the found version looks dubious or obsolete try the current version
+        if (cmp2 < 0 && cmp1 > 0) {
+            /* Rather desperate approach (java.home should have been among
+             * sun.boot.library.path)
+             */
+            File javawFile = null;
+            String JDK_directory = System.getProperty("java.home");
+            javawFile = Path.of(JDK_directory, "bin", "java").toFile();
+            if (!javawFile.exists()) {
+                javawFile = Path.of(JDK_directory, "bin", "javaw").toFile();
+            }
+            if (!javawFile.exists()) {
+                javawFile = Path.of(JDK_directory, "bin", "javaw.exe").toFile();
+            }
+            if (javawFile.exists()) {
+                foundVersion = javaVersion;
+                // Okay, indeed found something better suited
+                return javawFile;
+            }
+        }
+        if (javaw != null) {
+            javaVersion = javaw.getParentFile().getParentFile().getName();
+        }
+        if (cmp2 == -2) {
+            // Unclear version info - but should we actually pester the user?
+            int answer = JOptionPane.showConfirmDialog(null,
+                    "Having trouble to compare required Java version " + minJavaVersion
+                    + " with current Java version " + javaVersion + "."
+                    + "\n\n"
+                    + "Try to start " + name + " with Java " + javaVersion + " nevertheless?",
+                    "Java Version Trouble",
+                    JOptionPane.OK_CANCEL_OPTION,
+                    JOptionPane.WARNING_MESSAGE);
+            if (answer == JOptionPane.CANCEL_OPTION) {
+                System.exit(1);
+            }
+        }
+        else if (cmp2 < 0) {
+            // The found version is obsolete and unsuited for the product start
+            JOptionPane.showMessageDialog(null,
+                        name + " requires at least Java version " + minJavaVersion + ","
+                        + "\n"
+                        + "but is attempted to be run with Java " + javaVersion + " only!" 
+                        + "\n\n"
+                        + name + " cannot be started."
+                        + "\n\n"
+                        + "Ensure at least Java " + minJavaVersion + " is installed or disable Java " + javaVersion + "!",
+                        "Java Version Error",
+                        JOptionPane.ERROR_MESSAGE);
+            System.exit(1);
+        }
+        return javaw;
+    }
+
+    /**
+     * Compares the numerical parts of the specified version strings hierarchically,
+     * after leading and trailing text has been cut off. Returns -1 if {@code avail}
+     * is "smaller" (shorter or lower) than {@code required}, 0 if both are equivalent,
+     * and 1 if {@code avail} represents a higher version than {@code required}. In
+     * case of parsing problems, the result will be -2.
+     * 
+     * @param avail - a string supposed to contain the current Java version code like
+     *     "jdk-17.0.2-open10" or "1.8.0".
+     * @param required - a string assumed to specify a required Java version, e.g.
+     *     "11" or "17.2.1" or "jre1.8.2".
+     * @return -1, 0, or 1 if the contained dot-separated number sequences could be
+     *     compared, -2 otherwise.
+     */
+    private static int compareVersionStrings(String avail, String required)
+    {
+        avail = deriveFormattedVersionString(avail);
+        required = deriveFormattedVersionString(required);
+        if (avail.isEmpty() || required.isEmpty()) {
+            return -2;
+        }
+        int cmp = avail.compareTo(required);
+        if (cmp != 0) {
+            cmp /= Math.abs(cmp);
+        }
+        return cmp;
+    }
+
+    /**
+     * Extracts version information of the kind d.dd.ddd (with varying
+     * number of digits in every section) from the given {@code verString}
+     * and returns a formatted version with exactly 3 digits per section
+     * for a lexicographic comparison and ordering. A leading 1 (as in
+     * "1.8.0_261") will be dropped.
+     * 
+     * @param verString - a string assumed to contain version information.
+     * @return the formatted string - might be empty if there is no version
+     *     info available - requires at least  single dot.
+     */
+    private static String deriveFormattedVersionString(String verString)
+    {
+        if (VER_MATCHER.reset(verString).matches()) {
+            verString = VER_MATCHER.group(2);
+            String[] parts = verString.split("[._]");
+            int i = 0;
+            if (parts.length > 1 && parts[0].equals("1")) {
+                i++;
+            }
+            StringBuilder sb = new StringBuilder();
+            for (; i < parts.length; i++) {
+                if (sb.length() > 0) {
+                    sb.append(".");
+                }
+                int nbr = 0;
+                try {
+                    nbr = Integer.parseInt(parts[i]);
+                }
+                catch (NumberFormatException ex) {}
+                sb.append(String.format("%03d", nbr));
+            }
+            verString = sb.toString();
+        }
+        else {
+            verString = "";
+        }
+        return verString;
+    }
+    // END KGU#1095 2023-10-30
+
 }
