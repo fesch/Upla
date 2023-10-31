@@ -61,8 +61,8 @@ public class Main {
         }
         
         if((System.getProperty("os.name").toLowerCase().startsWith("mac os x") ||
-            System.getProperty("os.name").toLowerCase().startsWith("nix") ||
-            System.getProperty("os.name").toLowerCase().startsWith("nux")) &&
+            System.getProperty("os.name").toLowerCase().endsWith("nix") ||
+            System.getProperty("os.name").toLowerCase().endsWith("nux")) &&
             !path.startsWith("/"))
         {
             path = "/"+path;
