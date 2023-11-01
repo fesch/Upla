@@ -71,8 +71,8 @@ public class Main {
         }
         
         if((System.getProperty("os.name").toLowerCase().startsWith("mac os x") ||
-            System.getProperty("os.name").toLowerCase().startsWith("nix") ||
-            System.getProperty("os.name").toLowerCase().startsWith("nux")) &&
+            System.getProperty("os.name").toLowerCase().endsWith("nix") ||
+            System.getProperty("os.name").toLowerCase().endsWith("nux")) &&
             !path.startsWith("/"))
         {
             path = "/"+path;
@@ -216,6 +216,8 @@ public class Main {
             JOptionPane.showMessageDialog(null, e.getMessage(), "Error #main 2", JOptionPane.ERROR_MESSAGE);
             System.exit(1);
         }
+        // make sure we terminate the process
+        System.exit(0);
     }
     
     private static boolean isOnline()
